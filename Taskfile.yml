@@ -1,0 +1,78 @@
+# https://taskfile.dev
+
+version: '3'
+
+includes:
+  docker: containers/Taskfile.yml
+
+tasks:
+  default:
+    cmds:
+      - task -l
+    silent: true
+
+  check:
+    desc: Run all pre-commit hooks
+    cmds:
+      - pre-commit run -a
+
+  pre-commit:
+    cmds:
+      - pre-commit install
+    sources:
+      - .git/hooks/pre-commit
+      - .pre-commit-config.yaml
+    generates:
+      - .git/hooks/pre-commit
+    method: checksum
+
+  pre-commit-setup:
+    cmds:
+      - pip3 install pre-commit
+    status:
+      - which pre-commit
+
+  go-mod-download:
+    cmds:
+      - go mod tidy
+      - go mod verify
+    sources:
+      - go.mod
+      - go.sum
+    generates:
+      - go.sum
+    method: checksum
+
+  setup:
+    desc: Bootstrap dev environment
+    preconditions:
+      - sh: "[ $(python3 --version | cut -d ' ' -f 2 | awk -F'.' '{print ($2 >= 8) }') = 1 ]"
+        msg: "Required python version not found (>=3.8)"
+    cmds:
+      - task: pre-commit-setup
+      - task: pre-commit
+      - task: go-mod-download
+
+  test:
+    desc: Run tests and coverage
+    cmds:
+      - go test -v ./pkg/...
+
+  build:
+    desc: "Build binaries"
+    cmds:
+      - mkdir -p bin
+      - go build -a -o bin/dumbpipe cmd/main.go
+      - task: build-utils
+
+  build-utils:
+    desc: "Build utils"
+    dir: utils
+    cmds:
+      - mkdir -p ../bin
+      - go build -o ../bin/validate-script main.go
+
+  clean:
+    desc: "Cleanup the previous build"
+    cmds:
+      - rm -rf bin
